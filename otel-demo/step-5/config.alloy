@@ -1,0 +1,186 @@
+otelcol.receiver.otlp "default" {
+	grpc {
+		endpoint = sys.env("OTEL_COLLECTOR_HOST") + ":" + sys.env("OTEL_COLLECTOR_PORT_GRPC")
+	}
+
+	http {
+		endpoint = sys.env("OTEL_COLLECTOR_HOST") + ":" + sys.env("OTEL_COLLECTOR_PORT_HTTP")
+
+		cors {
+			allowed_origins = ["http://*", "https://*"]
+		}
+	}
+
+	output {
+		metrics = [otelcol.processor.resourcedetection.default.input]
+		logs    = [otelcol.processor.resourcedetection.default.input]
+		traces  = [otelcol.processor.resourcedetection.default.input]
+	}
+}
+
+otelcol.receiver.prometheus "default" {
+	output {
+		metrics = [otelcol.processor.resourcedetection.default.input]
+	}
+}
+
+prometheus.exporter.blackbox "default" {
+	config = "{ modules: { http_2xx: { prober: http } } }"
+
+	target {
+		name = "frontend-proxy"
+		address = "http://" + sys.env("FRONTEND_PROXY_ADDR")
+		module = "http_2xx"
+	}
+}
+
+prometheus.exporter.cadvisor "default" {
+	docker_host = "unix:///var/run/docker.sock"
+}
+
+prometheus.exporter.postgres "default" {
+	data_source_names = ["postgresql://root:otel@postgresql:5432/otel?sslmode=disable"]
+}
+
+prometheus.exporter.redis "default" {
+	redis_addr = "valkey-cart:6379"
+	redis_user = "valkey"
+}
+
+prometheus.exporter.unix "default" {
+	rootfs_path = "/hostfs"
+	set_collectors = ["boottime", "cpu", "disk", "filesystem", "loadavg", "meminfo", "netstat", "processes"]
+
+	filesystem {
+		mount_points_exclude = "^/(dev|proc|sys|run/k3s/containerd|var/lib/docker|var/lib/kubelet|snap)($|/)"
+	}
+}
+
+prometheus.scrape "blackbox" {
+	targets = prometheus.exporter.blackbox.default.targets
+	forward_to = [otelcol.receiver.prometheus.default.receiver]
+}
+
+prometheus.scrape "cadvisor" {
+	targets = prometheus.exporter.cadvisor.default.targets
+	forward_to = [otelcol.receiver.prometheus.default.receiver]
+}
+
+prometheus.scrape "postgres" {
+	targets = prometheus.exporter.postgres.default.targets
+	forward_to = [otelcol.receiver.prometheus.default.receiver]
+}
+
+prometheus.scrape "redis" {
+	targets = prometheus.exporter.redis.default.targets
+	forward_to = [otelcol.receiver.prometheus.default.receiver]
+}
+
+prometheus.scrape "unix" {
+	targets = prometheus.exporter.unix.default.targets
+	forward_to = [otelcol.receiver.prometheus.default.receiver]
+}
+
+otelcol.processor.memory_limiter "default" {
+	check_interval         = "5s"
+	limit_percentage       = 80
+	spike_limit_percentage = 25
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = [otelcol.processor.batch.default.input]
+		traces  = [otelcol.processor.transform.default.input]
+	}
+}
+
+otelcol.processor.memory_limiter "spanmetrics_limiter" {
+	check_interval         = "5s"
+	limit_percentage       = 80
+	spike_limit_percentage = 25
+
+	output {
+		metrics = [otelcol.processor.batch.spanmetrics_batch.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	output {
+		metrics = [otelcol.exporter.otlphttp.default_prometheus.input, otelcol.exporter.debug.default.input]
+		logs    = [otelcol.exporter.debug.default.input, otelcol.exporter.loki.default.input]
+		traces  = [otelcol.exporter.otlp.default.input, otelcol.exporter.debug.default.input, otelcol.connector.spanmetrics.default.input]
+	}
+}
+
+otelcol.processor.batch "spanmetrics_batch" {
+	output {
+		metrics = [otelcol.exporter.otlphttp.default_prometheus.input, otelcol.exporter.debug.default.input]
+	}
+}
+
+otelcol.processor.transform "default" {
+	error_mode = "ignore"
+
+	trace_statements {
+		context    = "span"
+		statements = ["replace_pattern(name, \"\\\\?.*\", \"\")", "replace_match(name, \"GET /api/products/*\", \"GET /api/products/{productId}\")"]
+	}
+
+	output {
+		traces = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.resourcedetection "default" {
+	detectors = ["env", "docker", "system"]
+
+	output {
+		metrics = [otelcol.processor.memory_limiter.default.input]
+		logs = [otelcol.processor.memory_limiter.default.input]
+		traces = [otelcol.processor.memory_limiter.default.input]
+	}
+}
+
+otelcol.exporter.otlphttp "default_prometheus" {
+	client {
+		endpoint = "http://prometheus:9090/api/v1/otlp"
+
+		tls {
+			insecure = true
+		}
+		http2_ping_timeout = "0s"
+	}
+}
+
+otelcol.exporter.debug "default" {
+	verbosity = "Basic"
+}
+
+otelcol.exporter.otlp "default" {
+	client {
+		endpoint = "jaeger:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+otelcol.exporter.loki "default" {
+	forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
+
+otelcol.connector.spanmetrics "default" {
+	histogram {
+		explicit { }
+	}
+
+	output {
+		metrics = [otelcol.processor.memory_limiter.spanmetrics_limiter.input]
+	}
+}

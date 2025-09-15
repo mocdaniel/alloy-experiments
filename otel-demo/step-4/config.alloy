@@ -1,0 +1,104 @@
+otelcol.receiver.otlp "default" {
+	grpc {
+		endpoint = sys.env("OTEL_COLLECTOR_HOST") + ":" + sys.env("OTEL_COLLECTOR_PORT_GRPC")
+	}
+
+	http {
+		endpoint = sys.env("OTEL_COLLECTOR_HOST") + ":" + sys.env("OTEL_COLLECTOR_PORT_HTTP")
+
+		cors {
+			allowed_origins = ["http://*", "https://*"]
+		}
+	}
+
+	output {
+		metrics = [otelcol.processor.memory_limiter.default.input]
+		logs    = [otelcol.processor.memory_limiter.default.input]
+		traces  = [otelcol.processor.memory_limiter.default.input]
+	}
+}
+
+otelcol.processor.memory_limiter "default" {
+	check_interval         = "5s"
+	limit_percentage       = 80
+	spike_limit_percentage = 25
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = [otelcol.processor.batch.default.input]
+		traces  = [otelcol.processor.transform.default.input]
+	}
+}
+
+otelcol.processor.memory_limiter "spanmetrics_limiter" {
+	check_interval         = "5s"
+	limit_percentage       = 80
+	spike_limit_percentage = 25
+
+	output {
+		metrics = [otelcol.processor.batch.spanmetrics_batch.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	output {
+		metrics = [otelcol.exporter.otlphttp.default_prometheus.input, otelcol.exporter.debug.default.input]
+		logs    = [otelcol.exporter.debug.default.input]
+		traces  = [otelcol.exporter.otlp.default.input, otelcol.exporter.debug.default.input, otelcol.connector.spanmetrics.default.input]
+	}
+}
+
+otelcol.processor.batch "spanmetrics_batch" {
+	output {
+		metrics = [otelcol.exporter.otlphttp.default_prometheus.input, otelcol.exporter.debug.default.input]
+	}
+}
+
+otelcol.processor.transform "default" {
+	error_mode = "ignore"
+
+	trace_statements {
+		context    = "span"
+		statements = ["replace_pattern(name, \"\\\\?.*\", \"\")", "replace_match(name, \"GET /api/products/*\", \"GET /api/products/{productId}\")"]
+	}
+
+	output {
+		traces = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.exporter.otlphttp "default_prometheus" {
+	client {
+		endpoint = "http://prometheus:9090/api/v1/otlp"
+
+		tls {
+			insecure = true
+		}
+		http2_ping_timeout = "0s"
+	}
+}
+
+otelcol.exporter.debug "default" {
+	verbosity = "Basic"
+}
+
+otelcol.exporter.otlp "default" {
+	client {
+		endpoint = "jaeger:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+otelcol.connector.spanmetrics "default" {
+	histogram {
+		explicit { }
+	}
+
+	output {
+		metrics = [otelcol.processor.memory_limiter.spanmetrics_limiter.input]
+	}
+}
+
