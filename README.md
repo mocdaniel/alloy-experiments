@@ -13,3 +13,11 @@ More information can be found in the respective scenario's README.
 This scenario tries to use Grafana Alloy as drop-in replacement for the [official OTel Collector](https://opentelemetry.io/docs/collector/) in the context of the [OTel Demo Project](https://github.com/open-telemetry/opentelemetry-demo).
 
 [More information can be found in the scenario's README](./otel-demo/README.md).
+
+### Exploring the Grafana Alloy Web UI
+
+One of Grafana Alloy's features that set it apart from the [official OTel Collector](https://opentelemetry.io/docs/collector/) is its Web UI that can be used for debugging, visualizing, and inspecting configured OTel pipelines.
+
+In this scenario, a minimal setup provides a functional demo supporting multiple types of OTel signals, and guides you through the different parts of Grafana Alloy's Web UI.
+
+[More information can be found in the scenario's README](./alloy-ui/README.md).
