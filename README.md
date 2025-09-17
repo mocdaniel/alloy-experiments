@@ -21,3 +21,11 @@ One of Grafana Alloy's features that set it apart from the [official OTel Collec
 In this scenario, a minimal setup provides a functional demo supporting multiple types of OTel signals, and guides you through the different parts of Grafana Alloy's Web UI.
 
 [More information can be found in the scenario's README](./alloy-ui/README.md).
+
+### Importing Remote Configuration with Grafana Alloy
+
+Another feature of Alloy is its ability to import configuration snippets and secrets from HTTP endpoints, Hashicorp Vault, Kubernetes, or S3 object storage.
+
+In this scenario, the same minimal setup as in the [Web UI scenario](#exploring-the-grafana-alloy-web-ui) is first converted to a standalone [custom component](https://grafana.com/docs/alloy/latest/get-started/custom_components/), then uploaded to S3 object storage and used remotely.
+
+[More information can be found in the scenario's README](./remote-config/README.md).

@@ -1,0 +1,20 @@
+remote.s3 "remote_config" {
+    path = "s3://<bucket-name>/remote-config.alloy"
+
+    client {
+        key = "<client-key>"
+        secret = "<secret-key>"
+        endpoint = "<s3-endpoint>"
+        region = "<region>"
+    }
+}
+
+import.string "imported_remote_config" {
+    content = remote.s3.remote_config.content
+}
+
+imported_remote_config.my_custom_config "instantiated_remote_config" {}
+
+livedebugging {
+    enabled = true
+}
