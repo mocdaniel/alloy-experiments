@@ -1,0 +1,123 @@
+x-default-logging: &logging
+  driver: json-file
+  options:
+    max-size: 5m
+    max-file: "2"
+    tag: "{{.Name}}"
+
+x-default-otel-generator-config: &generator-config
+  image: ghcr.io/krzko/otelgen:latest
+  deploy:
+    resources:
+      limits:
+        memory: 50M
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  alloy-1:
+    image: grafana/alloy:latest
+    container_name: alloy-1
+    hostname: alloy-1
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+    restart: unless-stopped
+    command: [
+      "run",
+      "--server.http.listen-addr=0.0.0.0:12345",
+      "--storage.path=/var/lib/alloy/data",
+      "--stability.level=experimental",
+      "--cluster.enabled",
+      "--cluster.join-addresses=alloy-1,alloy-2",
+      "--cluster.name=alloy-cluster",
+      "/etc/alloy/config.alloy"
+    ]
+    user: 0:0
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+    ports:
+      - "12345:12345"
+      - "4317"
+    healthcheck:
+      test: >
+        bash -c 'exec 3<>/dev/tcp/localhost/12345 &&
+                 printf "GET /-/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+                 cat <&3 | grep -q "Alloy is ready"'
+      start_period: 10s
+      interval: 2s
+      timeout: 1s
+      retries: 10
+    logging: *logging
+
+  alloy-2:
+    image: grafana/alloy:latest
+    container_name: alloy-2
+    hostname: alloy-2
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+    restart: unless-stopped
+    command: [
+      "run",
+      "--server.http.listen-addr=0.0.0.0:12345",
+      "--storage.path=/var/lib/alloy/data",
+      "--stability.level=experimental",
+      "--cluster.enabled",
+      "--cluster.join-addresses=alloy-1,alloy-2",
+      "--cluster.name=alloy-cluster",
+      "/etc/alloy/config.alloy"
+    ]
+    user: 0:0
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+    ports:
+      - "12346:12345"
+      - "4317"
+    healthcheck:
+      test: >
+        bash -c 'exec 3<>/dev/tcp/localhost/12345 &&
+                 printf "GET /-/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+                 cat <&3 | grep -q "Alloy is ready"'
+      start_period: 10s
+      interval: 2s
+      timeout: 1s
+      retries: 10
+    # Helpful for smooth cluster creation
+    depends_on:
+      alloy-1:
+        condition: service_healthy
+    logging: *logging
+  
+  alloy-proxy:
+    image: nginx:latest
+    container_name: alloy-proxy
+    restart: unless-stopped
+    ports:
+      - "4317"
+      - "12345"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      alloy-1:
+        condition: service_healthy
+      alloy-2:
+        condition: service_healthy
+    logging: *logging
+
+  otel-metrics-generator:
+    container_name: otel-metrics-generator
+    <<: *generator-config
+    command: ["--insecure", "--service-name=otel-metrics", "--rate=1", "--otel-exporter-otlp-endpoint=alloy-proxy:4317", "metrics", "gauge"]
+
+  otel-logs-generator:
+    container_name: otel-logs-generator
+    <<: *generator-config
+    command: ["--insecure", "--service-name=otel-logs", "--rate=1", "--otel-exporter-otlp-endpoint=alloy-proxy:4317", "logs", "multi"]
+
+  otel-traces-generator:
+    container_name: otel-traces-generator
+    <<: *generator-config
+    command: ["--insecure", "--duration=86400", "--rate=1", "--service-name=otel-traces", "--otel-exporter-otlp-endpoint=alloy-proxy:4317", "traces", "multi"]

@@ -29,3 +29,11 @@ Another feature of Alloy is its ability to import configuration snippets and sec
 In this scenario, the same minimal setup as in the [Web UI scenario](#exploring-the-grafana-alloy-web-ui) is first converted to a standalone [custom component](https://grafana.com/docs/alloy/latest/get-started/custom_components/), then uploaded to S3 object storage and used remotely.
 
 [More information can be found in the scenario's README](./remote-config/README.md).
+
+### Clustering Grafana Alloy
+
+Alloy supports [clustering](https://grafana.com/docs/alloy/latest/get-started/clustering/) multiple deployments for horizontal scalability, high availability, and workload distribution.
+
+In this scenario, the same minimal setup as in the [Web UI scenario](#exploring-the-grafana-alloy-web-ui) is being used, with **two instances** of Grafana Alloy and NGINX serving as load-balancer for incoming OTLP messages.
+
+[More information can be found in the scenario's README](./alloy-cluster/README.md).
