@@ -1,12 +1,28 @@
-otelcol.receiver.otlp "default" {
-    grpc {
-        endpoint = "0.0.0.0:4317"
+prometheus.scrape "node_exporters" {
+    targets = [
+        {"__address__" = "node-exporter-1:9100", "instance" = "node-exporter-1"},
+        {"__address__" = "node-exporter-2:9100", "instance" = "node-exporter-2"},
+        {"__address__" = "node-exporter-3:9100", "instance" = "node-exporter-3"},
+        {"__address__" = "node-exporter-4:9100", "instance" = "node-exporter-4"},
+        {"__address__" = "node-exporter-5:9100", "instance" = "node-exporter-5"},
+        {"__address__" = "node-exporter-6:9100", "instance" = "node-exporter-6"},
+        {"__address__" = "node-exporter-7:9100", "instance" = "node-exporter-7"},
+        {"__address__" = "node-exporter-8:9100", "instance" = "node-exporter-8"},
+    ]
+
+    clustering {
+        enabled = true
     }
 
+    scrape_interval = "5s"
+    scrape_timeout = "5s"
+
+    forward_to = [otelcol.receiver.prometheus.default.receiver]
+}
+
+otelcol.receiver.prometheus "default" {
     output {
         metrics = [otelcol.processor.memory_limiter.default.input]
-        logs    = [otelcol.processor.memory_limiter.default.input]
-        traces  = [otelcol.processor.memory_limiter.default.input]
     }
 }
 
@@ -17,42 +33,10 @@ otelcol.processor.memory_limiter "default" {
 
     output {
         metrics = [otelcol.processor.batch.default.input]
-        logs    = [otelcol.processor.batch.default.input]
-        traces  = [otelcol.processor.batch.default.input, otelcol.connector.spanmetrics.default.input]
-    }
-}
-
-otelcol.processor.memory_limiter "spanmetrics_limiter" {
-    check_interval = "1s"
-    limit_percentage = 80
-    spike_limit_percentage = 25
-
-    output {
-        metrics = [otelcol.processor.batch.spanmetrics_batch.input]
-    }
-}
-
-otelcol.connector.spanmetrics "default" {
-    histogram {
-        explicit {}
-    }
-
-    metrics_flush_interval = "1s"
-
-    output {
-        metrics = [otelcol.processor.memory_limiter.spanmetrics_limiter.input]
     }
 }
 
 otelcol.processor.batch "default" {
-    output {
-        metrics = [otelcol.exporter.debug.default.input]
-        logs    = [otelcol.exporter.debug.default.input]
-        traces  = [otelcol.exporter.debug.default.input]
-    }
-}
-
-otelcol.processor.batch "spanmetrics_batch" {
     output {
         metrics = [otelcol.exporter.debug.default.input]
     }
